@@ -35,9 +35,9 @@ serialNum = {}
 pathSchedule = r"\\Apckranefa01pv\apckr001\CKR\APCKRMFLPT001P\G_Drive\Groups\QA\SQT by QE\MODULES\TeleBot\QC Molding System for Telebot.xlsm"
 telegram.ReplyKeyboardRemove()
 
-allowedUsernames = ['fsngpz']
+allowedUsernames = ['fsngpz', 'okvialli'] #-> Masukkan username telegram bot ini untuk memberi akses kepada user
 
-def start(update, context):
+def start(update, context): #-> Function ini berguna untuk memulai bot dan mengecek apakah user diperbolehkan menggunakan bot ini atau tidak
     if update.effective_chat.username not in allowedUsernames:
         print(update.effective_user.username)
         context.bot.send_message(reply_markup=ReplyKeyboardRemove() ,chat_id=update.effective_chat.id,
@@ -76,27 +76,18 @@ def start(update, context):
                                            "File of the *GRN*")
             menu[f"{update.effective_user.username}"] = "Incoming Quality Control"
             print(menu)
-        elif menu[f"{update.effective_user.username}"] == 'Quality Control':
-            buttons = [[KeyboardButton('PASS'), KeyboardButton('FAIL')], [KeyboardButton('BACK')]]
-            context.bot.send_message(chat_id=update.effective_chat.id, parse_mode='Markdown',
-                                     text=f"Hello {update.effective_user.first_name}, To find the PPT File "
-                                          f"of Inspection file please send me the photo of *LKP* :)!",
-                                     reply_markup=ReplyKeyboardMarkup(buttons))
-            menu[f"{update.effective_user.username}"] = "Quality Control"
-            print(menu)
 
 
-def message(update, context):
-
+def message(update, context): #-> Function ini untuk meng-handle text yg tidak dimengerti oleh Bot
     update.message.reply_text(parse_mode='Markdown',
                               text="Sorry I dont understand what you mean :(")
 
-def command_handler(update, context):
+def command_handler(update, context): #-> Function ini untuk meng-handle command "/" yg tidak dimengerti oleh Bot
     update.message.reply_text(f"Sorry I dont understand command {update.message.text} :(")
 
 
-def photo(update: Update, context: CallbackContext):
-    if not menu or menu[f"{update.effective_user.username}"] == '':
+def photo(update: Update, context: CallbackContext): #-> Function ini untuk meng-handle Photo yang dikirimkan oleh User
+    if not menu or menu[f"{update.effective_user.username}"] == '': #-> Jika user belum memilih menu maka function ini akan di execute
         context.bot.send_message(chat_id=update.effective_chat.id, text="You are not selecting any menu!")
         context.bot.send_message(chat_id=update.effective_chat.id, parse_mode='Markdown',
                                  text="Please type */start* to choose the Menu")
@@ -105,50 +96,49 @@ def photo(update: Update, context: CallbackContext):
             update.message.reply_text(parse_mode='MarkdownV2',
                                       text="_Please wait while we're finding the report of the Incoming\.\.\._")
             print(update)
-            obj = context.bot.getFile(file_id=update.message.photo[-1].file_id)
+            obj = context.bot.getFile(file_id=update.message.photo[-1].file_id) #-> Variabel untuk menyimpan data dari foto yang dikirimkan oleh user
             print(obj)
-            filepath = obj['file_path']
+            filepath = obj['file_path'] #-> Mengambil url foto yang dikirimkan user dari telegram bot
             print(filepath)
-            qr = decodeQR.process(menu[f"{update.effective_user.username}"], filepath)
+            qr = decodeQR.process(menu[f"{update.effective_user.username}"], filepath) #-> Variable ini akan mengirim menu dan url foto ke decodeQR kemudian akan dikembalikan isi dari QR Code, Part Number dan Supplier Code
             print(qr)
-            if qr is None:
+            if qr is None: #-> Jika GRN yang di kembalikan tidak ada, maka function ini akan di execute
                 update.message.reply_text(parse_mode='MarkdownV2',
                                           text="*Sorry, the Photo/GRN that you sent is not valid\.\.\.*")
                 context.bot.send_message(parse_mode='Markdown', chat_id=update.effective_chat.id,
                                          text="_Please send me another Photo/GRN :)_")
-            else:
+            else: #-> Function ini akan di execute jika GRN yang dikemablikan valid
                 print(qr[0])
                 partnum = qr[2].find('-')
-                res = qr[2][:partnum] + '\\' + qr[2][partnum:]
-                suppclass = SQLProcess.suppclass(qr[1])
+                res = qr[2][:partnum] + '\\' + qr[2][partnum:] #-> Ini tidak penting
+                suppclass = SQLProcess.suppclass(qr[1]) #-> Variable ini kan mencari data ke dalam SQL dengan mengirimkan supplierclass(qr[1])
                 pn = qr[2]
                 sc = qr[1]
-                status = suppclass[0]
-                sclass = suppclass[1]
+                status = suppclass[0] #-> Variable ini akan menampung status
+                sclass = suppclass[1]  #-> Variable ini akan menampung supplier class
                 print(status, "|", sclass)
-                if status.lower() == 'certified':
+                if status.lower() == 'certified': #-> Jika statusnya adalah certified maka function ini akan di execute
                     print('CERTIFIED')
-                    subcom = SQLProcess.subcom(qr[2])
+                    subcom = SQLProcess.subcom(qr[2]) #-> Variable ini akan menampung subcommodity dngan mengirimkan partnumber ke function subcom yang ada di SQL Process
                     print(subcom)
-                    if subcom is None:
+                    if subcom is None: #-> Jika subcom tidak ditemukan maka function ini akan di execute
                         update.message.reply_text(parse_mode='MarkdownV2',
                                                   text="*Sorry, We cannot find the report for this GRN\!*")
-                    else:
+                    else: #-> Jika subcom ditemukan maka function ini akan di execute
                         print(subcom)
+                        materialrisk = SQLProcess.materialrisk(subcom[0], subcom[1]) #-> Variable ini akan menampung material risk dengan mengirimkan comm dan cmid
+                        risklevel = SQLProcess.risklevel(sclass, materialrisk[0], materialrisk[1]) # -> Variable ini akan menampung Risk Level dengan mengirimkan supplier class, Heavy Element dan Phthalate ke function risklevel yang ada di SQL Process
 
-                        materialrisk = SQLProcess.materialrisk(subcom[0], subcom[1])
-                        risklevel = SQLProcess.risklevel(sclass, materialrisk[0], materialrisk[1])
-
-                        result = SQLProcess.report(qr[2], risklevel[0], risklevel[1])
-                        freqHE = str(risklevel[0])
-                        freqPH = str(risklevel[1])
+                        result = SQLProcess.report(qr[2], risklevel[0], risklevel[1]) #-> Variable ini akan menampung beberapa data dari report dengan mengirimkan Partnumber, Tgl Test HE dan Tgl Test PH
+                        freqHE = str(risklevel[0]) #-> Merubah Tanggal HE menjadi string
+                        freqPH = str(risklevel[1]) #-> Merubah Tanggal PH menjadi string
 
                         print(len(freqHE), len(freqPH))
-                        if len(freqHE) > 3 and len(freqPH) > 3:
+                        if len(freqHE) > 3 and len(freqPH) > 3: #-> Bila result every incoming maka syntax ini akan di execute
                             # Every Incoming
                             print("#Every Incoming")
-                            RLHE = materialrisk[0]
-                            RLPH = materialrisk[1]
+                            RLHE = materialrisk[0]  #-> Variable ini akan menampung HE
+                            RLPH = materialrisk[1] #-> Variable ini akan menampung PH
 
                             # testHE = risklevel[0]
                             # testPH = risklevel[1]
@@ -166,7 +156,7 @@ def photo(update: Update, context: CallbackContext):
                             LRPH = '-'
                             LRHE = '-'
 
-                        elif len(freqHE) <= 3 and len(freqPH) <= 3:
+                        elif len(freqHE) <= 3 and len(freqPH) <= 3: #-> Function ini akan di execute jika Frequency test HE dan PH tidak every incoming
                             print("HE:", freqHE, "\nPH:", freqPH)
                             result = SQLProcess.report(qr[2], risklevel[0], risklevel[1])
                             RLHE = materialrisk[0]
@@ -196,7 +186,7 @@ def photo(update: Update, context: CallbackContext):
 
                             LRPH = result[6]
                             LRHE = result[7]
-                        elif len(freqHE) > 3 and len(freqPH) <= 3:
+                        elif len(freqHE) > 3 and len(freqPH) <= 3: #-> Function ini akan di execute jika Frequency test HE Every incoming tetapi PH tidak every incoming
                             # HE Periodical, PH Every Incoming
                             testfreq = list(risklevel)
                             print(testfreq)
@@ -222,7 +212,7 @@ def photo(update: Update, context: CallbackContext):
 
                             LRPH = result[6]
                             LRHE = '-'
-                        elif len(freqHE) <= 3 and len(freqPH) > 3:
+                        elif len(freqHE) <= 3 and len(freqPH) > 3: #-> Function ini akan di execute jika Frequency test HE tidak Every incoming tetapi PH every incoming
                             # HE Every Incoming, PH Periodical
                             testfreq = list(risklevel)
                             print(testfreq)
@@ -253,7 +243,7 @@ def photo(update: Update, context: CallbackContext):
                         print('BATCH HE:', batchPH)
                         print('HE Test in:', testinPH)
                         print('HE DAY:', dayPH)
-                        update.message.reply_text(parse_mode='MarkdownV2',
+                        update.message.reply_text(parse_mode='MarkdownV2',                              #-> Function ini akan mengirimkan result nya ke User
                                                   text="Here is the result of your Incoming report\n\n" +
                                                        f'`Supplier Class: `*_ __{str(qr[1])}___*\n\n' +
                                                        f'`Part Number:` *__{str(res)}__*\n\n ' +
@@ -277,13 +267,11 @@ def photo(update: Update, context: CallbackContext):
 
                                                   )
 
-                elif 'subcon' in status.lower():
+                elif 'subcon' in status.lower(): #-> Function ini akan di execute jika Status merupakan subcontractor
                     print('SUBCON')
-                    # update.message.reply_text(parse_mode='MarkdownV2',
-                    #                           text="*Subcontractor is underdevelopment\!*")
-                    subcom = SQLProcess.subcom(qr[2])
+                    subcom = SQLProcess.subcom(qr[2]) #-> Variable ini akan menyimpan comm dan cmid dengan mengirimkan partnumber ke function subcom
                     print("SUBCOM: ", subcom)
-                    if subcom is None:
+                    if subcom is None: #-> Jika subcom tidak ditemukan maka function ini akan di execute
                         context.bot.send_message(chat_id=update.effective_chat.id,
                                                  text="Sorry, we cannot found the *Commodity* and "
                                                       "*Subcommodity* based on the data that you sent to us!",
@@ -292,22 +280,23 @@ def photo(update: Update, context: CallbackContext):
                                                  text="Please send me another data... "
                                                       "but before you sent the text to me, please double check the data :)",
                                                  parse_mode="Markdown")
-                        return
-                    materialrisk = SQLProcess.materialrisk(subcom[0], subcom[1])
+                        return #-> Kemudian akan stop disini
+                    #Tapi jika subcom ditemukan, maka code akan terus dilanjutkan kebawah ini
+                    materialrisk = SQLProcess.materialrisk(subcom[0], subcom[1]) #-> Variable ini akan menyimpan HE dan PH dengan mengirimkan comm dan cmid ke function material risk
                     print("Material Risk : ", materialrisk)
-                    tipeClass = SQLProcess.typeClass(subcom[0], subcom[1])
+                    tipeClass = SQLProcess.typeClass(subcom[0], subcom[1]) #-> Variable ini akan menyimpan tipe class dengan mengirimkan comm dan cmid ke function typeClass
                     print(tipeClass)
-                    risklevelSubcon = SQLProcess.risklevelSubcon(sclass, materialrisk[0], materialrisk[1])
+                    risklevelSubcon = SQLProcess.risklevelSubcon(sclass, materialrisk[0], materialrisk[1]) #-> Vaariable ini akan menyimpan test HE dan test PH dengan mengirimkan supplier class, materail risk HE dan material risk PH
                     print(risklevelSubcon)
-                    result = SQLProcess.report(qr[2], risklevelSubcon[0], risklevelSubcon[1])
-                    freqHE = str(risklevelSubcon[0])
-                    freqPH = str(risklevelSubcon[1])
+                    result = SQLProcess.report(qr[2], risklevelSubcon[0], risklevelSubcon[1]) #-> Variable ini akan menyimpan report dari
+                    freqHE = str(risklevelSubcon[0]) #-> Merubah Frequency testing HE menjadi string
+                    freqPH = str(risklevelSubcon[1]) #-> Merubah Frequency testing PH menjadi string
                     print(len(freqHE), len(freqPH))
                     print("RLHE:", freqHE, "; RLPH:", freqPH)
                     # tipeClass = "1"
-                    if tipeClass == "1":
+                    if tipeClass == "1": #-> Jika tipeClass nya 1 makan function ini akan di execute
 
-                        if len(freqHE) > 3 and len(freqPH) > 3:
+                        if len(freqHE) > 3 and len(freqPH) > 3: #-> Ini semua sama seperti yang diatas tadi
                             # Every Incoming
                             print("#Every Incoming")
                             RLHE = materialrisk[0]
@@ -440,24 +429,25 @@ def photo(update: Update, context: CallbackContext):
                                                        f"```python In: {dayHE}```\n\n"
 
                                                   )
-                    elif tipeClass == '2':
+                    elif tipeClass == '2': #-> Jika tipeClass nya 2 makan function ini akan di execute
                         print("Type 2")
-                        RLHE = materialrisk[0]
-                        RLPH = materialrisk[1]
+                        RLHE = materialrisk[0] #-> Variable ini akan menyimpan Risk Level HE
+                        RLPH = materialrisk[1] #-> Variable ini akan menyimpan Risk Level PH
                         print("Risk Level HE", RLHE)
                         print("Risk Level PH", RLPH)
 
-                        rawMat = SQLProcess.PNRawMat(pn)
+                        rawMat = SQLProcess.PNRawMat(pn) #-> Variable ini akan menyimpan Raw Material dengan mengirimkan partnumber ke function PNRawMat
                         print("PN: ", rawMat)
-                        if rawMat is None:
+                        if rawMat is None: #-> Jika raw material tidak ditemukan maka function ini akan di execute
                             context.bot.send_message(chat_id=update.effective_chat.id, parse_mode="Markdown",
                                                      text="We cannot found the *Raw Material* for this *Part Number* :(")
                             context.bot.send_message(chat_id=update.effective_chat.id,
                                                      text="Please send me another data... "
                                                           "but before you sent the text to me, please double check the data :)",
                                                      parse_mode="Markdown")
-                            return
-                        report = (SQLProcess.rawMatLER(rawMat, sc))
+                            return #-> Kemudian akan stop disini
+                        #Tapi jika raw material ditemukan, maka code akan tetap di execute
+                        report = (SQLProcess.rawMatLER(rawMat, sc)) #-> Variable ini akan menyimpan LER Number HE, Tanggal Report HE, LER Number PH, dan tanggal report PH
                         print("Report", report)
                         subconName = report[1].split(":")
                         PNRawMat = report[1].split(":")
@@ -568,55 +558,6 @@ def photo(update: Update, context: CallbackContext):
                                                        f"`-Risk Level: {RLHE}`\n" +
                                                        f"`-Test Frequent: {testHE}`\n"
                                                   )
-        except telegram.error.TimedOut:
-            context.bot.send_message(chat_id=update.effective_chat.id,
-                                     text="_We are failed to get the_ *photo*, due to Timed Out error...")
-            context.bot.send_message(chat_id=update.effective_chat.id, text="_Please re-send the photo!_")
-        except Exception as e:
-            print(str(e))
-
-    elif menu[f"{update.effective_user.username}"] == "Quality Control":
-        try:
-            update.message.reply_text(parse_mode='MarkdownV2',
-                                      text="_Please wait while we're finding the PPT of the Inspection\.\.\._")
-            print(update)
-            obj = context.bot.getFile(file_id=update.message.photo[-1].file_id)
-            print(obj)
-            filepath = obj['file_path']
-            print(filepath)
-            qr = decodeQR.process(menu[f"{update.effective_user.username}"], filepath)
-            print("The QR is:", qr)
-            if qr is None:
-                update.message.reply_text(parse_mode='MarkdownV2',
-                                          text="*Sorry, the Photo/LKP that you sent is not valid\.\.\.*")
-                context.bot.send_message(parse_mode='Markdown', chat_id=update.effective_chat.id,
-                                         text="_Please send me another Photo/LKP :)_")
-            else:
-                partNum[f'{update.effective_user.username}'] = qr[0]
-                serialNum[f'{update.effective_user.username}'] = qr[1]
-                print("Part Number :", partNum[f'{update.effective_user.username}'])
-                molding = SQLProcess.qcmold(partNum[f'{update.effective_user.username}'])
-                print(molding)
-                if molding is None:
-                    update.message.reply_text(parse_mode='Markdown', text="`This part has no Inspection!`")
-                elif molding[0] is not None and molding[1] == '':
-                    buttons = [[KeyboardButton('PASS'), KeyboardButton('FAIL')], [KeyboardButton('BACK')]]
-                    update.message.reply_text(parse_mode='Markdown',
-                                              text="`This Part is ` *Critical* ` but does not have Inspection File`",
-                                              reply_markup=ReplyKeyboardMarkup(buttons))
-                elif molding[0] is not None and molding[1] is not None:
-                    pathPPT[f'{update.effective_user.username}'] = molding[1]
-                    fileName[f'{update.effective_user.username}'] = pathPPT[f'{update.effective_user.username}'][-10::]
-                    update.message.reply_text(parse_mode='Markdown',
-                                              text=f'_Yeay, We have found the File '
-                                                   f'for Part Number_ *{partNum[f"{update.effective_user.username}"]}*')
-                    update.message.reply_text(parse_mode='Markdown',
-                                              text=f'The PPT file of this Part is refering to '
-                                                   f'*{fileName[f"{update.effective_user.username}"]}*')
-                    buttons = [[KeyboardButton('Yes')], [KeyboardButton('No')]]
-                    context.bot.send_message(parse_mode='Markdown', chat_id=update.effective_chat.id,
-                                             text='Do you want me to send the PPT file?',
-                                             reply_markup=ReplyKeyboardMarkup(buttons))
         except telegram.error.TimedOut:
             context.bot.send_message(chat_id=update.effective_chat.id,
                                      text="_We are failed to get the_ *photo*, due to Timed Out error...")
@@ -1152,8 +1093,9 @@ def file(update: Update, context: CallbackContext):
         except Exception as e:
             print(str(e))
 
-def GRN(update: Update, context: CallbackContext):
+def GRN(update: Update, context: CallbackContext): #-> Function ini digunakan jika user mengetik /GRN SupplierCode Partnumber. Ex: /GRN 4646 3223-8006
 
+    #Selebih nya kebawah, sama seperti syntax diatas
     qr = (update.message.text.split(' '))
     if len(qr) < 2:
         context.bot.send_message(chat_id=update.effective_chat.id, parse_mode='Markdown',
@@ -1615,8 +1557,6 @@ def GRN(update: Update, context: CallbackContext):
                                            f"`-Risk Level: {RLHE}`\n" +
                                            f"`-Test Frequent: {testHE}`\n"
                                       )
-
-# print(GRN(update= Update, context= CallbackContext, SupplierClass="4715" ,PartNum="GKH23-2109"))
 
 def Exit(update: Update, context: CallbackContext):
     Status[f"{update.effective_user.username}"] = ''
@@ -2312,19 +2252,15 @@ def main():
     updater = Updater(token='2040596461:AAHnI_4y77tKaGbzYkRugilS2XNn8YQrb-8', use_context=True)
     dp = updater.dispatcher
 
+
     dp.add_handler(CommandHandler('GRN', GRN))
     dp.add_handler(MessageHandler(Filters.photo, photo))
     dp.add_handler(MessageHandler(Filters.document.jpg, file))
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('input', input))
+
     dp.add_handler(CallbackQueryHandler(queryHandler))
     dp.add_handler(CommandHandler('exit', Exit))
-    # dp.add_handler(CommandHandler('machine', machine))
-    # dp.add_handler(CommandHandler('mjr', major))
-    # dp.add_handler(CommandHandler('ra', readuit))
-    # dp.add_handler(CommandHandler('kpk', KPKOp))
-    # dp.add_handler(CommandHandler('rm', remarks))
-    # dp.add_handler(CommandHandler('dc', defectCode))
     dp.add_handler(MessageHandler(Filters.command, command_handler))
     dp.add_handler(MessageHandler(Filters.text, messageHandler))
     dp.add_handler(MessageHandler(Filters.text, message))
